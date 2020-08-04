@@ -6,17 +6,20 @@
 (defparameter *dictionary* (make-hash-table))
 
 (defmacro word (name)
-  `(gethash ',name *dictionary*))
+  `(gethash ,name *dictionary*))
+
+(defmacro wordq (name)
+  `(word ',name))
 
 (defclass word () 
   ((name        
      :initform nil
      :type symbolp
      :accessor .name)    
-   (interpret
+   (execute
      :initform #'identity
      :type functionp
-     :accessor .interpret)    
+     :accessor .execute)    
    (compile
      :initform #'identity
      :accessor .compile
@@ -26,7 +29,7 @@
      :accessor .immediatep)    
    ))
 
-(defmacro define-word (options interpret &optional (compile :same))
+(defmacro define-word (options execute &optional (compile nil))
   (with-gensyms (result)  
     `(let ((,result (make-instance 'word)))
        ,(if (symbolp options)
@@ -35,10 +38,10 @@
                (setf (.name ,result) ',(first options))
                (when (> 1 (length ,options))
                  (setf (.immediatep ,result) ',(second options)))))
-       ,(when interpret
-          `(setf (.interpret ,result) ,interpret))
+       ,(when execute
+          `(setf (.execute ,result) ,execute))
        ,(case compile 
-          (:same `(setf (.compile ,result) (.interpret ,result)))
+          (:same `(setf (.compile ,result) (.execute ,result)))
           ((:default nil) nil)
           (t `(setf (.compile ,result) ,compile)))
        (setf (gethash (.name ,result) *dictionary*) ,result))))
@@ -55,16 +58,16 @@
 (defmacro reflag (operator &rest arguments)
   "Converts arguments to lisp booleans, applies operator to them, and then
 converts the result back to a flag"
-  `(flag (,operator (mapcar #'deflag ,arguments))))
+  `(flag (,operator ,@(mapcar #'(lambda (argument) `(deflag ,argument)) arguments))))
 
 (defmacro with-state (state &body body)
-  `(destructuring-bind (data control return interpretingp)
+  `(destructuring-bind (data control return interpretingp) ,state
      ,@body))
 
 (defmacro return-state ()
   '(values (list data control return interpretingp)))
 
-(defmacro defword (options interpret &optional (compile :same))
+(defmacro defword (options execute &optional (compile :same))
   (flet ((parse-specs (specs)
             ;; So if there is only one spec, only (:s ...) and not ((:s ...)) may be written
             (when (not (listp (first specs))) 
@@ -73,7 +76,7 @@ converts the result back to a flag"
                    (variables (remove-duplicates (loop for spec in specs append (rest (first spec))))))
               (with-gensyms (state data control return interpretingp) 
                  `(lambda (,state) 
-                    (destructuring-bind (,data ,control ,return, ,interpretingp) ,state
+                    (destructuring-bind (,data ,control ,return ,interpretingp) ,state
                        (let (,@variables)
                          ,@(loop for (stack-and-variables mapping) in specs
                                  for stack = (case (first stack-and-variables)
@@ -82,16 +85,16 @@ converts the result back to a flag"
                                                    ((:r :return) return))
                                  for variables = (cdr stack-and-variables)
                                  collect `(setf ,@(loop for variable in variables
-                                                        append `(,variable (nth (- ,(length variables) 1) ,stack)))
+                                                        for index from (1- (length variables)) downto 0
+                                                        append `((nth ,index ,stack) ,variable))
                                                 ,stack (concatenate 'list (list ,@(nreverse mapping))
                                                                     (subseq ,stack ,(length variables))))))
-                       (list ,data ,control ,return ,interpretingp))))))) 
-        
-    (define-word options
-      (parse-spec interpret)
-      (if (member compile (:same nil :default))
-          compile
-          (parse-spec compile)))))
+                      (list ,data ,control ,return ,interpretingp)))))))
+    `(define-word ,options
+      ,(parse-specs execute)
+      ,(if (listp compile)
+           (parse-specs compile)
+           compile))))
 
 (defmacro defwords (&body forms)
   `(progn ,@(loop for form in forms collect `(defword ,@form))))
@@ -117,13 +120,39 @@ converts the result back to a flag"
   (|.| (:s a -- (progn (print a) nil)))
   (and (:s a b -- (logand a b)))
   (invert (:s a -- (lognot a)))
-  (|0=| (:s a -- (reflag not a))))
+  (|0=| (:s a -- (reflag not a)))
+  (|;| nil (:c definition -- )))
+    
 
+(defun run-code (tokens initial-state)
+  (loop for token in tokens
+        for state = initial-state 
+            then (with-state state
+                   (if interpretingp
+                       (interpret-1 token state)
+                       (compile-1 token state)))))
 
 (defun interpret-1 (token state)
   "token state => state"
   (with-state state
-    (cond ((word token) (.interpret (word token))))))
+    (cond ((word token) (.execute (word token))))))
 
-
-
+(defun compile-1 (token state)
+  "Compile one token"
+  (with-state state
+    ;;; This section will see if anything in the control stack requires
+    ;;; immediate action
+    (case (car control)
+      (:unnamed-definition (setf control (cons (list :definition token) 
+                                               (cdr control)))
+                           (return-state)))
+    
+    ;;; This section will handle tokens in general
+    (case token
+      (|;| (destructuring-bind (definition . rest) control
+              (assert (eq (car definition) :definition)
+                      (definition))
+              (add-definition definition)
+              (setf control rest)
+              (setf interpretingp t)
+              (return-state))))))
