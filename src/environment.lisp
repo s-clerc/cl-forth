@@ -127,7 +127,7 @@ converts the result back to a flag"
                  ?spec)))
           
     `(make-word ',name
-      ,(potentially-parse execute)
+      ,(parse-specs execute)
       ,(potentially-parse interpret)
       ,(potentially-parse compile))))
 
