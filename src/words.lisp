@@ -35,10 +35,13 @@
   (] nil (setf semantic-mode :compile))
   
   (postpone nil nil (:c -- (state-λ (token)
+                              ;; Remove the future function from the stack
+                             (pop control)
                              (push (state-λ ()
                                      (assert (eq semantic-mode :execute))
-                                     (funcall (.compile (word token)) state)) 
+                                     (run-word-function state (word token) #'.compile)) 
                                    (third (latest-definition control))))))
+  
   (literal nil nil (:s a -- (prog1 nil
                               (push (state-λ ()
                                       (push a data))
