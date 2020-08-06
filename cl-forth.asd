@@ -2,10 +2,13 @@
   :version "0.0.0"
   :author "Sam de Clerc"
   :license "GPLv3"
-  :depends-on ("split-sequence")
+  :depends-on ("split-sequence" "cl-utilities")
   :components ((:module "src"
                 :components
-                ((:file "main"))))
+                ((:file "main")
+                 (:file "environment")
+                 (:file "words")
+                 (:file "run"))))
   :description ""
   :in-order-to ((test-op (test-op "cl-forth/tests"))))
 
