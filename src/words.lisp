@@ -19,18 +19,21 @@
        (:c definition -- (prog1 (list :end-definition (second definition))
                             (add-definition definition)
                             (setf semantic-mode :interpret))))
-  (|:| nil (:c -- (progn (setf semantic-mode :compile)
-                         (state-λ (token)
-                           (setf (car control) 
-                                  (list :definition token nil))))))
-  (immediate nil (:c -- (prog1 nil
-                          (loop for π in control
-                                when (and (listp π)
-                                          (eq (car π) :end-definition))
-                                  do (setf (.compile (word (second π)))
-                                           :execute)))))
-  ([ nil nil (:c -- (prog1 nil (setf semantic-mode :interpret))))
-  (] nil (:c -- (prog1 nil (setf semantic-mode :compile))))
+  
+  (|:| nil ((setf semantic-mode :compile)
+            (:c -- (state-λ (token) 
+                     ;; Remove this function from stack
+                     (pop control)
+                     (push (list :definition token nil) control)))))
+  
+  (immediate nil (prog ((def-end (latest control :end-definition)))
+                   (when def-end
+                     (setf (.compile (word (second def-end)))
+                           :execute))))
+  
+  ([ nil nil (setf semantic-mode :interpret))
+  (] nil (setf semantic-mode :compile))
+  
   (postpone nil nil (:c -- (state-λ (token)
                              (push (state-λ ()
                                      (assert (eq semantic-mode :execute))
