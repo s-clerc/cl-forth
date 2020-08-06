@@ -1,10 +1,15 @@
 (in-package :cl-forth)
 
-(defun latest-definition (control)
-  (loop for π in control
-      when (and (listp π)
-                (eq (car π) :definition))
+(defun latest (stack keyword)
+  (loop for π in stack 
+      when (if (listp π)
+                (eq (car π) keyword)
+                (eq π keyword))
         return π))
+
+
+(defun latest-definition (control)
+  (latest control :definition))
 
 (defun run-code (tokens state)
   (dolist (?token tokens)
