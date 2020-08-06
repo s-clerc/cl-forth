@@ -70,31 +70,54 @@ converts the result back to a flag"
        (setf (gethash (.name ,result) *dictionary*) ,result))))
 
 (defmacro defword (name execute &optional (interpret :execute) (compile nil))
-  (labels ((parse-specs (specs)
+  (labels ((split-specs (specs)
+             (loop for spec in specs
+                   with new-spec = nil
+                   ;; If it does not start with a keyword then
+                   ;; we assume it is not a stack-transformation
+                   if (keywordp (car spec))
+                     do (setf new-spec (split-sequence '-- spec)) and
+                     collect new-spec into new-specs and
+                     append (cdar new-spec) into variables
+                   else
+                     collect `((:prog) ,spec) into new-specs
+                   finally 
+                     (return (values new-specs (remove-duplicates variables)))))
+           
+           (determine-stack (indicator)
+             (ccase indicator
+               ((:s :stack :data) 'data)
+               ((:c :control) 'control)
+               ((:r :return) 'return)
+               (:prog nil)))
+           
+           (stack-transformation (stack variables mapping)
+             `(setf ,@(loop for variable in variables
+                            for index from (1- (length variables)) downto 0
+                            unless (eq variable '_)
+                            append `(,variable (nth ,index ,stack)))
+                  ,stack (concatenate 'list 
+                                      (remove nil (list ,@(nreverse mapping)))
+                                      (subseq ,stack ,(length variables)))))
+           
+           (parse-specs (specs) 
              ;; So if there is only one spec, only (:s ...) and not ((:s ...)) may be written
              (when (not (listp (first specs))) 
                (setf specs (list specs)))
-             (let* ((specs (loop for spec in specs 
-                                 collect (split-sequence '-- spec)))
-                    (variables (remove-duplicates (loop for spec in specs 
-                                                        append (rest (first spec))))))
+             (multiple-value-bind (specs variables) (split-specs specs)
                (with-gensyms (state)
                   `(lambda (,state) 
                      (with-state ,state
-                        (let (,@(remove '_ variables))
-                          ,@(loop for (stack-and-variables mapping) in specs
-                                  for stack = (case (first stack-and-variables)
-                                                    ((:s :stack :data) 'data)
-                                                    ((:c :control) 'control)
-                                                    ((:r :return) 'return))
-                                  for variables = (cdr stack-and-variables)
-                                  collect `(setf ,@(loop for variable in variables
-                                                           for index from (1- (length variables)) downto 0
-                                                           unless (eq variable '_)
-                                                           append `(,variable (nth ,index ,stack)))
-                                                 ,stack (concatenate 'list 
-                                                                     (remove nil (list ,@(nreverse mapping)))
-                                                                     (subseq ,stack ,(length variables))))))
+                       (let (,@(remove '_ variables))
+                         ,@(loop for (stack-and-variables mapping) in specs
+                                 for variables = (cdr stack-and-variables)
+                                 ;; We need to know if it's a stack-transformation (:s ...)
+                                 ;; or just some code which runs e.g. (progn ...)
+                                 for stack = (determine-stack (first stack-and-variables))
+                                 if (not (null stack))
+                                   collect (stack-transformation stack variables mapping)
+                                 else
+                                   collect mapping))
                        (return-state))))))
            
            (potentially-parse (?spec)
@@ -102,8 +125,9 @@ converts the result back to a flag"
                       (not (null ?spec)))
                  (parse-specs ?spec)
                  ?spec)))
+          
     `(make-word ',name
-      ,(parse-specs execute)
+      ,(potentially-parse execute)
       ,(potentially-parse interpret)
       ,(potentially-parse compile))))
 
