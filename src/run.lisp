@@ -1,15 +1,22 @@
 (in-package :cl-forth)
 
-(defun latest (stack keyword)
-  (loop for π in stack 
-      when (if (listp π)
-                (eq (car π) keyword)
-                (eq π keyword))
-        return π))
+(define-list-structure (definition (:conc-name def-))
+  (name nil :type symbol)
+  (sentence nil :type list))
 
+(defun latest (stack identifier)
+  (unless (functionp identifier)
+    (let ((keyword identifier))
+      (setf identifier #'(lambda (sample)
+                             (if (listp sample)
+                               (eq (car sample) keyword)
+                               (eq sample keyword))))))
+  (loop for sample in stack 
+      when (funcall identifier sample)
+        return sample))
 
 (defun latest-definition (control)
-  (latest control :definition))
+  (latest control #'definitionp))
 
 (defun run-code (tokens state)
   (dolist (?token tokens)
@@ -75,21 +82,6 @@ Basically it runs the correct function based on the word settings"
                (return-state))))
         (t (push token (third (latest-definition control)))
            (return-state))))))
-
-(defun add-definition (definition)
-  (print (list "add" definition))
-  (destructuring-bind (_ name sentence) definition
-    (setf sentence (reverse sentence))
-    (make-word name
-      (state-λ ()
-        (print "enter")
-        (let* ((previous-mode semantic-mode)
-               (semantic-mode :execute)
-               (new-state (run-code sentence (return-state))))
-          (print "HI")
-          (setf (state-semantic-mode new-state) previous-mode)
-          new-state))
-      :execute)))
 
 (defun repl (&optional reset)
   (when reset

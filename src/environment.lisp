@@ -1,5 +1,9 @@
 (in-package :cl-forth)
 
+(defparameter *dictionary* (make-hash-table))
+
+(defvar *state* (make-state))
+
 (defmacro word (name)
   `(gethash ,name *dictionary*))
 
@@ -34,7 +38,22 @@
   "Forth flag to Lisp Boolean"
   (if (= flag 0) nil t))
 
-(defstruct (state (:type list) :named (:predicate statep))
+(defmacro define-list-structure (options &rest parameters)
+  (let* ((options (if (symbolp options)
+                      (list options)
+                      options))
+         (symbol-name (symbol-name (car options)))
+         (predicate (intern (concatenate 'string symbol-name
+                                        (if (find #\- symbol-name)
+                                            "-P"
+                                            "P")))))
+    `(defstruct (,@options
+                  (:type list) 
+                  :named
+                  (:predicate ,predicate))
+        ,@parameters)))
+
+(define-list-structure state
   (data nil :type list)
   (control nil :type list)
   (return nil :type list)
@@ -47,6 +66,9 @@
   "Converts arguments to lisp booleans, applies operator to them, and then
 converts the result back to a flag"
   `(flag (,operator ,@(mapcar #'(lambda (argument) `(deflag ,argument)) arguments))))
+
+(defmacro run (&body body)
+  `(setf *state* (run-code ',body *state*)))
 
 (defconstant +lambda-list+ '(data control return semantic-mode))
 
@@ -69,67 +91,64 @@ converts the result back to a flag"
        (setf (.compile ,result) ,compile)
        (setf (gethash (.name ,result) *dictionary*) ,result))))
 
+(defmacro spec (&body specs)
+  (flet ((split-specs (specs)
+           (loop for spec in specs
+                 with new-spec = nil
+                 ;; If it does not start with a keyword then
+                 ;; we assume it is not a stack-transformation
+                 if (keywordp (car spec))
+                   do (setf new-spec (split-sequence '-- spec)) and
+                   collect new-spec into new-specs and
+                   append (cdar new-spec) into variables
+                 else
+                   collect `((:prog) ,spec) into new-specs
+                 finally 
+                   (return (values new-specs (remove-duplicates variables)))))
+         (determine-stack (indicator)
+           (ccase indicator
+             ((:s :stack :data) 'data)
+             ((:c :control) 'control)
+             ((:r :return) 'return)
+             (:prog nil)))
+         (stack-transformation (stack variables mapping)
+           `(setf ,@(loop for variable in variables
+                          for index from (1- (length variables)) downto 0
+                          unless (eq variable '_)
+                          append `(,variable (nth ,index ,stack)))
+                ,stack (concatenate 'list 
+                                    (remove nil (list ,@(nreverse mapping)))
+                                    (subseq ,stack ,(length variables))))))
+    ;; So if there is only one spec, only (:s ...) and not ((:s ...)) may be written
+    (when (not (listp (first specs))) 
+      (setf specs (list specs)))
+    (multiple-value-bind (specs variables) (split-specs specs)
+      (with-gensyms (state)
+         `(lambda (,state &rest remaining-arguments) 
+            (declare (ignorable remaining-arguments))
+            (with-state ,state
+              (let (,@(remove '_ variables))
+                ,@(loop for (stack-and-variables mapping) in specs
+                        for variables = (cdr stack-and-variables)
+                        ;; We need to know if it's a stack-transformation (:s ...)
+                        ;; or just some code which runs e.g. (progn ...)
+                        for stack = (determine-stack (first stack-and-variables))
+                        if (not (null stack))
+                          collect (stack-transformation stack variables mapping)
+                        else
+                          collect mapping))
+              (return-state)))))))
+
 (defmacro defword (name execute &optional (interpret :execute) (compile nil))
-  (labels ((split-specs (specs)
-             (loop for spec in specs
-                   with new-spec = nil
-                   ;; If it does not start with a keyword then
-                   ;; we assume it is not a stack-transformation
-                   if (keywordp (car spec))
-                     do (setf new-spec (split-sequence '-- spec)) and
-                     collect new-spec into new-specs and
-                     append (cdar new-spec) into variables
-                   else
-                     collect `((:prog) ,spec) into new-specs
-                   finally 
-                     (return (values new-specs (remove-duplicates variables)))))
-           
-           (determine-stack (indicator)
-             (ccase indicator
-               ((:s :stack :data) 'data)
-               ((:c :control) 'control)
-               ((:r :return) 'return)
-               (:prog nil)))
-           
-           (stack-transformation (stack variables mapping)
-             `(setf ,@(loop for variable in variables
-                            for index from (1- (length variables)) downto 0
-                            unless (eq variable '_)
-                            append `(,variable (nth ,index ,stack)))
-                  ,stack (concatenate 'list 
-                                      (remove nil (list ,@(nreverse mapping)))
-                                      (subseq ,stack ,(length variables)))))
-           
-           (parse-specs (specs) 
-             ;; So if there is only one spec, only (:s ...) and not ((:s ...)) may be written
-             (when (not (listp (first specs))) 
-               (setf specs (list specs)))
-             (multiple-value-bind (specs variables) (split-specs specs)
-               (with-gensyms (state)
-                  `(lambda (,state) 
-                     (with-state ,state
-                       (let (,@(remove '_ variables))
-                         ,@(loop for (stack-and-variables mapping) in specs
-                                 for variables = (cdr stack-and-variables)
-                                 ;; We need to know if it's a stack-transformation (:s ...)
-                                 ;; or just some code which runs e.g. (progn ...)
-                                 for stack = (determine-stack (first stack-and-variables))
-                                 if (not (null stack))
-                                   collect (stack-transformation stack variables mapping)
-                                 else
-                                   collect mapping))
-                       (return-state))))))
-           
-           (potentially-parse (?spec)
-             (if (and (listp ?spec) 
-                      (not (null ?spec)))
-                 (parse-specs ?spec)
-                 ?spec)))
-          
-    `(make-word ',name
-      ,(parse-specs execute)
-      ,(potentially-parse interpret)
-      ,(potentially-parse compile))))
+  (flet ((potentially-parse (?spec)
+           (if (and (listp ?spec) 
+                    (not (null ?spec)))
+               `(spec ,@?spec)
+               ?spec)))
+        `(make-word ',name
+                    ,(potentially-parse execute)
+                    ,(potentially-parse interpret)
+                    ,(potentially-parse compile))))
 
 (defmacro defwords (&body forms)
   `(progn ,@(loop for form in forms collect `(defword ,@form))))
