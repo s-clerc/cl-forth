@@ -42,12 +42,12 @@
                              (push (state-λ ()
                                      (assert (eq semantic-mode :execute))
                                      (run-word-function state (word token) #'.compile)) 
-                                   (third (latest-definition control))))))
+                                   (def-sentence (latest-definition control))))))
   
   (literal nil nil (:s a -- (prog1 nil
                               (push (state-λ ()
                                       (push a data))
-                                    (third (latest-definition control)))))))
+                                    (def-sentence (latest-definition control))))))
 
 (defun flag (boolean)
   "Lisp Boolean to Forth Flag"
