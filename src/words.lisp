@@ -49,6 +49,21 @@
                                       (push a data))
                                     (third (latest-definition control)))))))
 
+(defun flag (boolean)
+  "Lisp Boolean to Forth Flag"
+  (if boolean -1 0))
+
+(defun deflag (flag)
+  "Forth flag to Lisp Boolean"
+  (if (= flag 0) nil t))
+
+;; Macro because `and` is not a function :(
+(defmacro reflag (operator &rest arguments)
+  "Converts arguments to lisp booleans, applies operator to them, and then
+converts the result back to a flag"
+  `(flag (,operator ,@(mapcar #'(lambda (argument) `(deflag ,argument)) arguments))))
+
+
 (defun add-definition (definition)
   (print (list "add" definition))
   (destructuring-bind (_ name sentence) definition

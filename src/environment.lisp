@@ -30,13 +30,7 @@
      :accessor .compile
      :type (or functionp keywordp))))
 
-(defun flag (boolean)
-  "Lisp Boolean to Forth Flag"
-  (if boolean -1 0))
 
-(defun deflag (flag)
-  "Forth flag to Lisp Boolean"
-  (if (= flag 0) nil t))
 
 (defmacro define-list-structure (options &rest parameters)
   (let* ((options (if (symbolp options)
@@ -60,12 +54,6 @@
   (semantic-mode :interpret :type (member :interpret 
                                           :compile 
                                           :execute)))
-
-;; Macro because `and` is not a function :(
-(defmacro reflag (operator &rest arguments)
-  "Converts arguments to lisp booleans, applies operator to them, and then
-converts the result back to a flag"
-  `(flag (,operator ,@(mapcar #'(lambda (argument) `(deflag ,argument)) arguments))))
 
 (defmacro run (&body body)
   `(setf *state* (run-code ',body *state*)))
