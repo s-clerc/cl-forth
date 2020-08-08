@@ -48,6 +48,20 @@
                               (push (state-λ ()
                                       (push a data))
                                     (def-sentence (latest-definition control))))))
+  (then nil nil (loop with sentence = (def-sentence (latest-definition control)) 
+                      for token = (pop sentence)
+                      if (member token '(if))
+                        do (push (state-λ ()
+                                   (when (deflag (pop data))
+                                     (print "run")
+                                     (run-code internal-sentence (return-state))))
+                                 sentence)
+                           (setf (def-sentence (latest-definition control)) sentence)
+                        and return (return-state) 
+                      else
+                        collect token into internal-sentence
+                      ))
+  (if nil nil nil))
 
 (defun flag (boolean)
   "Lisp Boolean to Forth Flag"

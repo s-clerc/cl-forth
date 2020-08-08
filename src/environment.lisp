@@ -30,8 +30,6 @@
      :accessor .compile
      :type (or functionp keywordp))))
 
-
-
 (defmacro define-list-structure (options &rest parameters)
   (let* ((options (if (symbolp options)
                       (list options)
