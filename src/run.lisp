@@ -12,8 +12,8 @@
                                (eq (car sample) keyword)
                                (eq sample keyword))))))
   (loop for sample in stack 
-      when (funcall identifier sample)
-        return sample))
+        when (funcall identifier sample)
+          return sample))
 
 (defun latest-definition (control)
   (latest control #'definitionp))
@@ -28,7 +28,7 @@
                         (:interpret (interpret-1 ?token state))
                         (:compile (compile-1 ?token state))
                         (:execute (execute-1 ?token state))))))
-     (print state))
+     (format t "~&~s ~s" ?token state))
   state)
 
 (define-condition word-semantics-null-error (error)

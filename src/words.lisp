@@ -6,7 +6,7 @@
 
 (defun deflag (flag)
   "Forth flag to Lisp Boolean"
-  (if (= flag 0) nil t))
+  (not (= flag 0)))
 
 ;; Macro because `and` is not a function :(
 (defmacro reflag (operator &rest arguments)

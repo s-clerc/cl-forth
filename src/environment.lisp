@@ -2,8 +2,6 @@
 
 (defparameter *dictionary* (make-hash-table))
 
-(defvar *state* (make-state))
-
 (defmacro word (name)
   `(gethash ,name *dictionary*))
 
@@ -52,6 +50,8 @@
   (semantic-mode :interpret :type (member :interpret 
                                           :compile 
                                           :execute)))
+
+(defvar *state* (make-state))
 
 (defmacro run (&body body)
   `(setf *state* (run-code ',body *state*)))
