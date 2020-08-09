@@ -32,11 +32,6 @@ converts the result back to a flag"
   (invert (:s a -- (lognot a)))
   (|0=| (:s a -- (reflag not a)))
   ;;; Special words
-  (\; nil nil 
-      (:c definition -- (prog1 (make-end-definition :name (second definition))
-                          (add-definition definition)
-                          (setf semantic-mode :interpret))))
-  
   (|:| nil ((setf semantic-mode :compile)
             (:c -- (spec :c _ -- (make-definition
                                      ;; The token
@@ -58,25 +53,15 @@ converts the result back to a flag"
                                      (run-word-function state (word token) #'.compile)) 
                                    (def-sentence (latest-definition control))))))
   
-  (literal nil nil (:s a -- (prog1 nil
-                              (push (state-λ ()
-                                      (push a data))
-                                    (def-sentence (latest-definition control))))))
-  (then nil nil (loop with sentence = (def-sentence (latest-definition control)) 
-                      for token = (pop sentence)
-                      if (member token '(if))
-                        do (push (state-λ ()
-                                   (when (deflag (pop data))
-                                     (print "run")
-                                     (run-code internal-sentence (return-state))))
-                                 sentence)
-                           (setf (def-sentence (latest-definition control)) sentence)
-                        and return (return-state) 
-                      else
-                        collect token into internal-sentence
-                      ))
-  (if nil nil nil))
+  (literal nil nil ((:s a -- )
+                    (push (state-λ ()
+                            (push a data))
+                          (def-sentence (latest-definition control))))))
 
+(defword \; nil nil 
+    ((setf semantic-mode :interpret)
+     (:c definition -- (make-end-definition :name (second definition)))
+     (add-definition definition)))
 
 (defun add-definition (definition)
   (print (list "add" definition))
@@ -92,3 +77,22 @@ converts the result back to a flag"
           (setf (state-semantic-mode new-state) previous-mode)
           new-state))
       :execute)))
+
+(defwords
+  (then nil nil (loop with sentence = (def-sentence (latest-definition control)) 
+                      for token = (pop sentence)
+                      if (member token '(if))
+                        do (push (create-control-flow token internal-sentence)
+                                 sentence)
+                           (setf (def-sentence (latest-definition control)) sentence)
+                        and return (return-state) 
+                      else
+                        collect token into internal-sentence))
+  (if nil nil nil)
+  (else nil nil nil))
+
+(defun create-control-flow (token internal-sentence)
+  (state-λ ()
+    (ccase token
+      (if (when (deflag (pop data))
+            (run-code internal-sentence (return-state)))))))
