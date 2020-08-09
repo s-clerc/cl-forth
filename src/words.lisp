@@ -81,9 +81,10 @@ converts the result back to a flag"
 (defwords
   (then nil nil (loop with sentence = (def-sentence (latest-definition control)) 
                       for token = (pop sentence)
-                      if (member token '(if))
-                        do (push (create-control-flow token internal-sentence)
+                      if (eq token 'if)
+                        do (push (create-conditional internal-sentence)
                                  sentence)
+                           (print "make sent")
                            (setf (def-sentence (latest-definition control)) sentence)
                         and return (return-state) 
                       else
@@ -91,8 +92,15 @@ converts the result back to a flag"
   (if nil nil nil)
   (else nil nil nil))
 
-(defun create-control-flow (token internal-sentence)
+(defun create-conditional (internal-sentence &aux)
+  (setf internal-sentence (split-sequence 'else internal-sentence))
   (state-λ ()
-    (ccase token
-      (if (when (deflag (pop data))
-            (run-code internal-sentence (return-state)))))))
+    (run-code (if (deflag (pop data))
+                  (second internal-sentence)
+                  (first internal-sentence))
+              (return-state))))
+
+
+
+
+
