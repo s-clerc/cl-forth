@@ -4,6 +4,14 @@
   (name nil :type symbol)
   (sentence nil :type list))
 
+(define-list-structure jump
+  (tag nil :type symbol))
+
+(defun resolved-jump-p (?jump)
+  (and (jumpp ?jump)
+       ;; Make sure that the jump is resolved
+       (not (null (jump-tag ?jump)))))
+
 (defun latest (stack identifier)
   (unless (functionp identifier)
     (let ((keyword identifier))
@@ -18,17 +26,39 @@
 (defun latest-definition (control)
   (latest control #'definitionp))
 
-(defun run-code (tokens state)
-  (dolist (?token tokens)
+(defun run-code (sentence state)
+  (when (listp sentence)
+    (setf sentence (coerce sentence 'vector)))
+  (do* ((i 0 (incf i))
+        (element (elt sentence i)
+               (when (> (length sentence) i) 
+                   (elt sentence i)))
+        (controlee (car (state-control state))
+                   (car (state-control state))))
+       ((or (> i 10) (not element)))
      (setf state
            (with-state state
-             (if (functionp ?token) 
-                 (funcall ?token state)
-                 (ccase semantic-mode
-                        (:interpret (interpret-1 ?token state))
-                        (:compile (compile-1 ?token state))
-                        (:execute (execute-1 ?token state))))))
-     (format t "~&~s ~s" ?token state))
+             (cond 
+               ;; Enabling future effects
+               ((functionp controlee) 
+                (funcall (pop control) state element))
+               ;; Used for control flow:
+               ((resolved-jump-p controlee)
+                (print (car control))
+                (print sentence)
+                (setf i (position (pop control) sentence))
+                (return-state))
+               ((jumpp element) 
+                (return-state))
+               ((functionp element) 
+                (funcall element state))
+               ;; Call another word
+               (t (funcall (ccase (car semantic-mode)
+                             (:interpret #'interpret-1)
+                             (:compile #'compile-1)
+                             (:execute #'execute-1))
+                           element state)))))
+     (format t "~&~a: ~s ~s" i element state))
   state)
 
 (define-condition word-semantics-null-error (error)
@@ -52,7 +82,7 @@ Basically it runs the correct function based on the word settings"
   "=> state"
   (with-state state
     (cond ((word token)
-             (run-word-function state (word token) #'.interpret))
+           (run-word-function state (word token) #'.interpret))
           (t (push token data)
              (return-state)))))
 
@@ -60,28 +90,21 @@ Basically it runs the correct function based on the word settings"
   "=> state"
   (with-state state
     (cond ((word token)
-             (run-word-function state (word token) #'.execute))
+           (run-word-function state (word token) #'.execute))
           (t (push token data)
              (return-state)))))
 
 (defun compile-1 (token state)
   "Compile one token"
   (with-state state
-    ;;; This section will see if anything in the control stack requires
-    ;;; immediate action
-    (or
-      ;;; This section will handle tokens in general
-      (cond
-        ((functionp (car control)) 
-           (funcall (pop control) state token))
-        ((word token) 
+    (cond ((word token) 
            (handler-case (run-word-function state (word token) #'.compile)
              ;; So we embed it since it isn't immediate
              (word-semantics-null-error (_)
                (push token (third (latest-definition control)))
                (return-state))))
-        (t (push token (third (latest-definition control)))
-           (return-state))))))
+          (t (push token (third (latest-definition control)))
+             (return-state)))))
 
 (defun repl (&optional reset)
   (when reset
@@ -92,5 +115,5 @@ Basically it runs the correct function based on the word settings"
           (when (eq query :quit)
             (return))
           (setf *state*
-                (run-code query *state*)))))
+                (run-code (coerce query 'vector) *state*)))))
 

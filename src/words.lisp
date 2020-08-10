@@ -32,24 +32,26 @@ converts the result back to a flag"
   (invert (:s a -- (lognot a)))
   (|0=| (:s a -- (reflag not a)))
   ;;; Special words
-  (|:| nil ((setf semantic-mode :compile)
-            (:c -- (spec :c _ -- (make-definition
-                                     ;; The token
-                                     :name (car remaining-arguments)))))) 
+  (|:| ((push :compile semantic-mode)
+        (:c -- (spec :c _ -- (make-definition
+                                 ;; The token
+                                 :name (car remaining-arguments)))))) 
   
   (immediate nil (prog ((def-end (latest control 'end-definition)))
                    (when def-end
                      (setf (.compile (word (second def-end)))
                            :execute))))
   
-  ([ nil nil (setf semantic-mode :interpret))
-  (] nil (setf semantic-mode :compile))
+  ([ nil nil (push :interpret semantic-mode))
+  ;; From what I can tell, it is given in the spec that
+  ;; `]` may only be used in compilation mode
+  (] nil (pop semantic-mode))
   
   (postpone nil nil (:c -- (state-λ (token)
                               ;; Remove the future function from the stack
                              (pop control)
                              (push (state-λ ()
-                                     (assert (eq semantic-mode :execute))
+                                     (assert (eq (car semantic-mode) :execute))
                                      (run-word-function state (word token) #'.compile)) 
                                    (def-sentence (latest-definition control))))))
   
@@ -59,48 +61,41 @@ converts the result back to a flag"
                           (def-sentence (latest-definition control))))))
 
 (defword \; nil nil 
-    ((setf semantic-mode :interpret)
+    ((pop semantic-mode)
      (:c definition -- (make-end-definition :name (second definition)))
      (add-definition definition)))
 
 (defun add-definition (definition)
   (print (list "add" definition))
   (destructuring-bind (_ name sentence) definition
-    (setf sentence (reverse sentence))
+    (setf sentence (coerce (reverse sentence) 'vector))
     (make-word name
       (state-λ ()
-        (print "enter")
-        (let* ((previous-mode semantic-mode)
-               (semantic-mode :execute)
-               (new-state (run-code sentence (return-state))))
-          (print "HI")
-          (setf (state-semantic-mode new-state) previous-mode)
-          new-state))
+        (push :execute semantic-mode)
+        (setf state (run-code sentence (return-state)))
+        (pop (state-semantic-mode state))
+        state)
       :execute)))
 
 (defwords
-  (then nil nil (loop with sentence = (def-sentence (latest-definition control)) 
-                      for token = (pop sentence)
-                      if (eq token 'if)
-                        do (push (create-conditional internal-sentence)
-                                 sentence)
-                           (print "make sent")
-                           (setf (def-sentence (latest-definition control)) sentence)
-                        and return (return-state) 
-                      else
-                        collect token into internal-sentence))
-  (if nil nil nil)
-  (else nil nil nil))
-
-(defun create-conditional (internal-sentence &aux)
-  (setf internal-sentence (split-sequence 'else internal-sentence))
-  (state-λ ()
-    (run-code (if (deflag (pop data))
-                  (second internal-sentence)
-                  (first internal-sentence))
-              (return-state))))
-
-
+  (if nil nil (:c -- (let ((jump (make-jump)))
+                       (push (state-λ ()
+                               (unless (deflag (pop data))
+                                  (push jump control))) 
+                             (def-sentence (latest-definition control)))
+                       jump)))
+  (then nil nil (:c if-jump -- (prog1 nil
+                                 (setf (jump-tag if-jump) (gensym "THEN"))
+                                 (push if-jump (def-sentence (latest-definition control))))))
+                                
+  (else nil nil (:c if-jump -- (let ((jump (make-jump)))
+                                (push (state-λ ()
+                                        (push jump control)) 
+                                      (def-sentence (latest-definition control)))
+                                (setf (jump-tag if-jump) (gensym "ELSE"))
+                                (push if-jump
+                                      (def-sentence (latest-definition control)))
+                                jump))))
 
 
 

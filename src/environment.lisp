@@ -47,11 +47,13 @@
   (data nil :type list)
   (control nil :type list)
   (return nil :type list)
-  (semantic-mode :interpret :type (member :interpret 
-                                          :compile 
-                                          :execute)))
+  ;; elements are (member :interpret :compile :execute)
+  (semantic-mode '(:interpret) :type list))
 
 (defvar *state* (make-state))
+
+(defun reset ()
+  (setf *state* (make-state)))
 
 (defmacro run (&body body)
   `(setf *state* (run-code ',body *state*)))
@@ -59,6 +61,7 @@
 (defconstant +lambda-list+ '(data control return semantic-mode))
 
 (defmacro with-state (state &body body)
+  "Destructures the state struct, does not perform return manipulation"
   (with-gensyms (ignore)
     `(destructuring-bind (,ignore ,@+lambda-list+) ,state
         (declare (ignore ,ignore))
