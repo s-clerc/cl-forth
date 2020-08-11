@@ -58,12 +58,8 @@ converts the result back to a flag"
   (literal nil nil ((:s a -- )
                     (push (state-λ ()
                             (push a data))
-                          (def-sentence (latest-definition control))))))
+                          (def-sentence (latest-definition control))))))     
 
-(defword \; nil nil 
-    ((pop semantic-mode)
-     (:c definition -- (make-end-definition :name (second definition)))
-     (add-definition definition)))
 
 (defun add-definition (definition)
   (print (list "add" definition))
@@ -77,25 +73,38 @@ converts the result back to a flag"
         state)
       :execute)))
 
-(defwords
-  (if nil nil (:c -- (let ((jump (make-jump)))
-                       (push (state-λ ()
-                               (unless (deflag (pop data))
-                                  (push jump control))) 
-                             (def-sentence (latest-definition control)))
-                       jump)))
-  (then nil nil (:c if-jump -- (prog1 nil
-                                 (setf (jump-tag if-jump) (gensym "THEN"))
-                                 (push if-jump (def-sentence (latest-definition control))))))
+(defword \; nil nil 
+    ((pop semantic-mode)
+     (:c definition -- (make-end-definition :name (second definition)))
+     (add-definition definition)))
+
+(define-list-structure origin
+    (jump nil :type jump))
+(define-list-structure destination
+    (jump nil :type jump))
+
+;;; Control flow section
+(defmacro create-origin (control condition)
+  (with-gensyms (origin)
+    `(let ((,origin (make-origin
+                          :jump (make-jump))))
+       (push (state-λ ()
+               (when ,condition
+                 (push (origin-jump ,origin) semantic-mode)))
+             (def-sentence (latest-definition ,control)))
+       ,origin)))
+
+(defmacro resolve-origin (control origin &optional (prefix "ORIG·"))
+  `(prog1 nil
+     (setf (jump-tag (origin-jump ,origin)) (gensym ,prefix))
+     (push (origin-jump ,origin)
+           (def-sentence (latest-definition ,control)))))
+                                           
+(defwords  
+  (if nil nil (:c -- (create-origin control (not (deflag (pop data))))))
+  
+  (then nil nil ((:c else-jump --)
+                 (resolve-origin control else-jump "THEN·")))
                                 
-  (else nil nil (:c if-jump -- (let ((jump (make-jump)))
-                                (push (state-λ ()
-                                        (push jump control)) 
-                                      (def-sentence (latest-definition control)))
-                                (setf (jump-tag if-jump) (gensym "ELSE"))
-                                (push if-jump
-                                      (def-sentence (latest-definition control)))
-                                jump))))
-
-
-
+  (else nil nil ((:c if-jump -- (create-origin control t))
+                 (resolve-origin control if-jump "ELSE·"))))

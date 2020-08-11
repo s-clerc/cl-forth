@@ -32,21 +32,17 @@
   (do* ((i 0 (incf i))
         (element (elt sentence i)
                (when (> (length sentence) i) 
-                   (elt sentence i)))
-        (controlee (car (state-control state))
-                   (car (state-control state))))
+                   (elt sentence i))))
        ((or (> i 10) (not element)))
      (setf state
            (with-state state
              (cond 
                ;; Enabling future effects
-               ((functionp controlee) 
+               ((functionp (car control)) 
                 (funcall (pop control) state element))
                ;; Used for control flow:
-               ((resolved-jump-p controlee)
-                (print (car control))
-                (print sentence)
-                (setf i (position (pop control) sentence))
+               ((resolved-jump-p (car semantic-mode))
+                (setf i (position (pop semantic-mode) sentence))
                 (return-state))
                ((jumpp element) 
                 (return-state))
