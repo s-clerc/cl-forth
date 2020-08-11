@@ -110,7 +110,7 @@ converts the result back to a flag"
        (make-destination 
            :jump ,jump)))) 
 
-(defmacro resolve-destination (control destination 
+(defmacro jump-to-destination (control destination 
                                &optional (condition '(not (deflag (pop data)))))
   (with-gensyms ()
     `(push (state-λ ()
@@ -130,7 +130,7 @@ converts the result back to a flag"
   (begin nil nil (:c -- (create-destination control "BEGIN·")))
   
   (until nil nil ((:c begin-destination --)
-                  (resolve-destination 
+                  (jump-to-destination 
                       control 
                       begin-destination)))
   
@@ -140,7 +140,7 @@ converts the result back to a flag"
                    ;; The order matters here
                    ;; We first want to put in the function to jump
                    ;;  back to destination
-                   (resolve-destination control begin-destination t)
+                   (jump-to-destination control begin-destination t)
                    ;; Then the jump "tag" so we can jump to the end of
                    ;; repeat if need be
                    (resolve-origin control while-origin "REPEAT·"))))
