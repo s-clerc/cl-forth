@@ -44,7 +44,6 @@
                ;; Used for control flow:
                ((resolved-jump-p (car semantic-mode))
                 (setf i (position (pop semantic-mode) sentence))
-                (print i)
                 (return-state))
                ((jumpp element) 
                 (return-state))

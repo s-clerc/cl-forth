@@ -113,7 +113,6 @@ converts the result back to a flag"
   (with-gensyms ()
     `(push (state-λ ()
                (when ,condition
-                 (print "Activate jump")
                  (push (destination-jump ,destination) semantic-mode)))
            (def-sentence (latest-definition ,control)))))
                                            
