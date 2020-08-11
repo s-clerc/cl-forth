@@ -84,7 +84,8 @@ converts the result back to a flag"
     (jump nil :type jump))
 
 ;;; Control flow section
-(defmacro create-origin (control condition)
+(defmacro create-origin (control 
+                         &optional (condition '(not (deflag (pop data)))))
   (with-gensyms (origin)
     `(let ((,origin (make-origin
                           :jump (make-jump))))
@@ -109,7 +110,8 @@ converts the result back to a flag"
        (make-destination 
            :jump ,jump)))) 
 
-(defmacro resolve-destination (control destination condition)
+(defmacro resolve-destination (control destination 
+                               &optional (condition '(not (deflag (pop data)))))
   (with-gensyms ()
     `(push (state-λ ()
                (when ,condition
@@ -117,7 +119,7 @@ converts the result back to a flag"
            (def-sentence (latest-definition ,control)))))
                                            
 (defwords  
-  (if nil nil (:c -- (create-origin control (not (deflag (pop data))))))
+  (if nil nil (:c -- (create-origin control)))
   
   (then nil nil ((:c else-jump --)
                  (resolve-origin control else-jump "THEN·")))
@@ -129,5 +131,4 @@ converts the result back to a flag"
   (until nil nil ((:c begin-destination --)
                   (resolve-destination 
                       control 
-                      begin-destination
-                      (not (deflag (pop data)))))))
+                      begin-destination)))
