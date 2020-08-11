@@ -99,6 +99,23 @@ converts the result back to a flag"
      (setf (jump-tag (origin-jump ,origin)) (gensym ,prefix))
      (push (origin-jump ,origin)
            (def-sentence (latest-definition ,control)))))
+
+(defmacro create-destination (control &optional (prefix "DEST·"))
+  (with-gensyms (jump)
+    `(let ((,jump (make-jump
+                      :tag (gensym ,prefix))))
+       (push ,jump
+             (def-sentence (latest-definition ,control)))
+       (make-destination 
+           :jump ,jump)))) 
+
+(defmacro resolve-destination (control destination condition)
+  (with-gensyms ()
+    `(push (state-λ ()
+               (when ,condition
+                 (print "Activate jump")
+                 (push (destination-jump ,destination) semantic-mode)))
+           (def-sentence (latest-definition ,control)))))
                                            
 (defwords  
   (if nil nil (:c -- (create-origin control (not (deflag (pop data))))))
@@ -107,4 +124,11 @@ converts the result back to a flag"
                  (resolve-origin control else-jump "THEN·")))
                                 
   (else nil nil ((:c if-jump -- (create-origin control t))
-                 (resolve-origin control if-jump "ELSE·"))))
+                 (resolve-origin control if-jump "ELSE·")))
+  
+  (begin nil nil (:c -- (create-destination control "BEGIN·")))
+  (until nil nil ((:c begin-destination --)
+                  (resolve-destination 
+                      control 
+                      begin-destination
+                      (not (deflag (pop data)))))))

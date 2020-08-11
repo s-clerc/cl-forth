@@ -33,7 +33,7 @@
         (element (elt sentence i)
                (when (> (length sentence) i) 
                    (elt sentence i))))
-       ((or (> i 10) (not element)))
+       ((> i 10))
      (setf state
            (with-state state
              (cond 
@@ -43,11 +43,17 @@
                ;; Used for control flow:
                ((resolved-jump-p (car semantic-mode))
                 (setf i (position (pop semantic-mode) sentence))
+                (print i)
                 (return-state))
                ((jumpp element) 
                 (return-state))
                ((functionp element) 
                 (funcall element state))
+               ;; We can't do null checking in the do-test
+               ;; because there might be a future-effect
+               ;; or jump pending
+               ((null element)
+                (return))
                ;; Call another word
                (t (funcall (ccase (car semantic-mode)
                              (:interpret #'interpret-1)
