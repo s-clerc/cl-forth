@@ -128,7 +128,19 @@ converts the result back to a flag"
                  (resolve-origin control if-jump "ELSE·")))
   
   (begin nil nil (:c -- (create-destination control "BEGIN·")))
+  
   (until nil nil ((:c begin-destination --)
                   (resolve-destination 
                       control 
                       begin-destination)))
+  
+  (while nil nil (:c begin-destination -- (create-origin control) begin-destination))
+  
+  (repeat nil nil ((:c while-origin begin-destination --)
+                   ;; The order matters here
+                   ;; We first want to put in the function to jump
+                   ;;  back to destination
+                   (resolve-destination control begin-destination t)
+                   ;; Then the jump "tag" so we can jump to the end of
+                   ;; repeat if need be
+                   (resolve-origin control while-origin "REPEAT·"))))
