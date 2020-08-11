@@ -33,7 +33,8 @@
         (element (elt sentence i)
                (when (> (length sentence) i) 
                    (elt sentence i))))
-       ((> i 10))
+       ;; Emergency stop variable
+       (*halt*)
      (setf state
            (with-state state
              (cond 
