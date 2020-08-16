@@ -175,6 +175,8 @@ converts the result back to a flag"
       nil)
   (i ((:r loop -- loop)
       (:s -- (loop-index loop))))
+  (leave ((:r loop -- loop)
+          (setf (loop-unloop-now loop) t)))
   (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
                       for token = (car sentence)
                       if (eq token 'do)
