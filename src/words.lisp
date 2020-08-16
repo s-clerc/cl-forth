@@ -50,43 +50,6 @@ converts the result back to a flag"
                             (push a data))
                           (def-sentence (latest-definition control))))))
 
-(define-list-structure loop
-    (index 0 :type integer)
-    (limit nil :type integer)
-    (unloop-now nil :type boolean))
-
-(defun create-loop (internal-sentence)
-  (state-λ ()
-    (let* ((loop (car return)))
-      (loop for i from (loop-index loop) 
-                  below (loop-limit loop)
-            until (loop-unloop-now loop)
-            do (setf (loop-index loop) i
-                     state (run-code internal-sentence 
-                                     state))
-            finally (return (with-state state
-                              (pop return)
-                              (return-state)))))))
-
-(defwords 
-  (do ((:s limit initial --)
-       (:r -- (make-loop
-                  :index initial
-                  :limit limit)))
-      nil)
-  
-  (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
-                      for token = (car sentence)
-                      if (eq token 'do)
-                        do (push (create-loop internal-sentence)
-                                 sentence)
-                           (print "make sent")
-                           (setf (def-sentence (latest-definition control)) 
-                                 sentence)
-                        and return (return-state) 
-                      else
-                        collect (pop sentence) into internal-sentence)))
-                         
 ;; The following are segregated because they mess up parïnfer
 (defwords 
   ([ nil nil (push :interpret semantic-mode))
@@ -184,3 +147,39 @@ converts the result back to a flag"
                    ;; Then the jump "tag" so we can jump to the end of
                    ;; repeat if need be
                    (resolve-origin control while-origin "REPEAT·"))))
+
+(define-list-structure loop
+    (index 0 :type integer)
+    (limit nil :type integer)
+    (unloop-now nil :type boolean))
+
+
+(defun perform-loop (internal-sentence state)
+  (with-state state
+    (let* ((loop (car return)))
+      (loop for i from (loop-index loop) 
+                  below (loop-limit loop)
+            until (loop-unloop-now loop)
+            do (setf (loop-index loop) i
+                     state (run-code internal-sentence 
+                                     state))
+            finally (return (with-state state
+                              (pop return)
+                              (return-state)))))))
+
+(defwords 
+  (do ((:s limit initial --)
+       (:r -- (make-loop
+                  :index initial
+                  :limit limit)))
+      nil)
+  (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
+                      for token = (car sentence)
+                      if (eq token 'do)
+                        do (push (partial #'perform-loop internal-sentence)
+                                 sentence)
+                           (setf (def-sentence (latest-definition control)) 
+                                 sentence)
+                        and return (return-state) 
+                      else
+                        collect (pop sentence) into internal-sentence)))
