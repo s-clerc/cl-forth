@@ -15,7 +15,7 @@ converts the result back to a flag"
   `(flag (,operator ,@(mapcar #'(lambda (argument) `(deflag ,argument)) arguments))))
 
 (define-list-structure (end-definition (:conc-name end-def-))
-  (name nil :type symbol))
+  (name nil :type symbol))    
 
 (defwords
   (dup (:s a -- a a))
@@ -32,20 +32,10 @@ converts the result back to a flag"
   (invert (:s a -- (lognot a)))
   (|0=| (:s a -- (reflag not a)))
   ;;; Special words
-  (|:| ((push :compile semantic-mode)
-        (:c -- (spec :c _ -- (make-definition
-                                 ;; The token
-                                 :name (car remaining-arguments)))))) 
-  
   (immediate nil (prog ((def-end (latest control 'end-definition)))
                    (when def-end
                      (setf (.compile (word (second def-end)))
                            :execute))))
-  
-  ([ nil nil (push :interpret semantic-mode))
-  ;; From what I can tell, it is given in the spec that
-  ;; `]` may only be used in compilation mode
-  (] nil (pop semantic-mode))
   
   (postpone nil nil (:c -- (state-λ (token)
                               ;; Remove the future function from the stack
@@ -55,11 +45,54 @@ converts the result back to a flag"
                                      (run-word-function state (word token) #'.compile)) 
                                    (def-sentence (latest-definition control))))))
   
-  (literal nil nil ((:s a -- )
+  (literal nil nil ((:s a --)
                     (push (state-λ ()
                             (push a data))
-                          (def-sentence (latest-definition control))))))     
+                          (def-sentence (latest-definition control))))))
 
+(define-list-structure loop
+    (index 0 :type integer)
+    (limit nil :type integer)
+    (unloop-now nil :type boolean))
+
+(defun create-loop (internal-sentence)
+  (state-λ ()
+    (let* ((loop (car return)))
+      (loop for i from (loop-index loop) 
+                  below (loop-limit loop)
+            until (loop-unloop-now loop)
+            do (setf (loop-index loop) i
+                     state (run-code internal-sentence 
+                                     state))
+            finally (return (with-state state
+                              (pop return)
+                              (return-state)))))))
+
+(defwords 
+  (do ((:s limit initial --)
+       (:r -- (make-loop
+                  :index initial
+                  :limit limit)))
+      nil)
+  
+  (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
+                      for token = (car sentence)
+                      if (eq token 'do)
+                        do (push (create-loop internal-sentence)
+                                 sentence)
+                           (print "make sent")
+                           (setf (def-sentence (latest-definition control)) 
+                                 sentence)
+                        and return (return-state) 
+                      else
+                        collect (pop sentence) into internal-sentence)))
+                         
+;; The following are segregated because they mess up parïnfer
+(defwords 
+  ([ nil nil (push :interpret semantic-mode))
+  ;; From what I can tell, it is given in the spec that
+  ;; `]` may only be used in compilation mode
+  (] nil (pop semantic-mode)))
 
 (defun add-definition (definition)
   (print (list "add" definition))
@@ -73,17 +106,24 @@ converts the result back to a flag"
         state)
       :execute)))
 
-(defword \; nil nil 
+(defwords
+  (\; nil nil 
     ((pop semantic-mode)
      (:c definition -- (make-end-definition :name (second definition)))
      (add-definition definition)))
+  (|:| ((push :compile semantic-mode)
+        (:c -- (spec :c _ -- (make-definition
+                                 ;; The token
+                                 :name (car remaining-arguments)))))))
 
+;;;; Control flow section
+;;; The following data types are used for the sake of clarity
 (define-list-structure origin
     (jump nil :type jump))
+
 (define-list-structure destination
     (jump nil :type jump))
 
-;;; Control flow section
 (defmacro create-origin (control 
                          &optional (condition '(not (deflag (pop data)))))
   (with-gensyms (origin)
