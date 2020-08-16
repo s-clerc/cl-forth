@@ -173,6 +173,8 @@ converts the result back to a flag"
                   :index initial
                   :limit limit)))
       nil)
+  (i ((:r loop -- loop)
+      (:s -- (loop-index loop))))
   (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
                       for token = (car sentence)
                       if (eq token 'do)
