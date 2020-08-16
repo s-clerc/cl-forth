@@ -178,7 +178,7 @@ converts the result back to a flag"
   (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
                       for token = (car sentence)
                       if (eq token 'do)
-                        do (push (partial #'perform-loop internal-sentence)
+                        do (push (partial #'perform-loop (nreverse internal-sentence))
                                  sentence)
                            (setf (def-sentence (latest-definition control)) 
                                  sentence)
