@@ -80,7 +80,7 @@ converts the result back to a flag"
                                  :name (car remaining-arguments)))))))
 
 ;;;; Control flow section
-;;; The following data types are used for the sake of clarity
+;;;; The following data types are used for the sake of clarity
 (define-list-structure origin
     (jump nil :type jump))
 
@@ -153,19 +153,51 @@ converts the result back to a flag"
     (limit nil :type integer)
     (unloop-now nil :type boolean))
 
-
-(defun perform-loop (internal-sentence state)
+;;;; DO loops below
+(defun perform-loop (internal-sentence +p state)
   (with-state state
-    (let* ((loop (car return)))
-      (loop for i from (loop-index loop) 
-                  below (loop-limit loop)
-            until (loop-unloop-now loop)
+    (let* ((loop (car return))
+           (state state)
+           (limit (loop-limit loop)))
+      (loop for previous-i = nil then i
+            for i = (loop-index loop) 
+                  then (if +p
+                           (+ i (pop (state-data state)))
+                           (1+ i))
+            for x from 0
+            until (or (loop-unloop-now loop)
+                      (when previous-i
+                        (or (<= previous-i (1- limit) limit i)
+                            (>= previous-i limit (1- limit) i)))
+                      ;; Emergency iteration limits
+                      (> x 100)
+                      *halt*)
             do (setf (loop-index loop) i
                      state (run-code internal-sentence 
-                                     state))
-            finally (return (with-state state
+                                     state))  
+               (format t "~&i: ~s " i)
+               (print (return-state))     
+            finally (when (> x 100) (print "overflow")) 
+                    (return (with-state state
                               (pop return)
+                              (print state)
                               (return-state)))))))
+
+(defun process-loop (state &optional (+p nil))
+  (with-state state
+    (loop with sentence = (def-sentence (latest-definition control)) 
+          for token = (car sentence)
+          if (eq token 'do)
+            do (push (partial 'perform-loop 
+                           (nreverse internal-sentence)
+                           +p)
+                           
+                     sentence)
+               (setf (def-sentence (latest-definition control)) 
+                     sentence)
+            and return (return-state) 
+          else
+            collect (pop sentence) into internal-sentence)))
 
 (defwords 
   (do ((:s limit initial --)
@@ -177,13 +209,8 @@ converts the result back to a flag"
       (:s -- (loop-index loop))))
   (leave ((:r loop -- loop)
           (setf (loop-unloop-now loop) t)))
-  (loop nil nil (loop with sentence = (def-sentence (latest-definition control)) 
-                      for token = (car sentence)
-                      if (eq token 'do)
-                        do (push (partial #'perform-loop (nreverse internal-sentence))
-                                 sentence)
-                           (setf (def-sentence (latest-definition control)) 
-                                 sentence)
-                        and return (return-state) 
-                      else
-                        collect (pop sentence) into internal-sentence)))
+  (loop nil nil (process-loop (return-state)))
+  (+loop nil nil (process-loop (return-state) t))) 
+
+
+
